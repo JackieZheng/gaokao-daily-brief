@@ -35,6 +35,13 @@
         border-radius:12px;background:#fff;color:var(--green);font-size:15px;cursor:pointer}
   .more[hidden]{display:none}
   .state{text-align:center;color:var(--muted);font-size:13px;padding:14px 0 6px}
+  /* 仿 iOS 弹性气泡：点击加载时弹性呼吸，条目上滑淡入 */
+  .bubble{width:14px;height:7px;border-radius:99px;background:var(--green-2);
+          margin:14px auto 0;opacity:0;transition:width .3s cubic-bezier(.2,.8,.3,1),opacity .2s}
+  .bubble.run{opacity:1;width:64px;animation:brun .9s cubic-bezier(.45,0,.55,1) infinite}
+  @keyframes brun{0%{transform:scaleX(.3)}50%{transform:scaleX(1)}100%{transform:scaleX(.3)}}
+  .item{animation:itin .4s cubic-bezier(.2,.8,.3,1) both}
+  @keyframes itin{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
 </style>
 </head>
 <body>
@@ -49,6 +56,7 @@
   <div class="tabs" id="tabs"></div>
 
   <div id="list"></div>
+  <div class="bubble" id="bubble"></div>
   <button class="more" id="more" hidden>加载更多</button>
   <div class="state" id="state"></div>
 
@@ -66,6 +74,8 @@
   var metaEl = document.getElementById('meta');
   var tabsEl = document.getElementById('tabs');
   var moreEl = document.getElementById('more');
+  var bubbleEl = document.getElementById('bubble');
+  var busy = false;
 
   // 文件名固定，靠 ?v=当天日期 绕过微信/CDN 强缓存
   // 文件名固定，靠 ?v= 绕过微信/CDN 强缓存。只带日期不够——同一天多次重导出时
@@ -160,7 +170,16 @@
   });
 
   moreEl.addEventListener('click', function () {
-    if (shown < LIST.length) renderMore();
+    if (busy || shown >= LIST.length) return;
+    // 气泡先呼吸一拍再追加，让「加载」节奏可见
+    busy = true;
+    bubbleEl.classList.add('run');
+    stateEl.textContent = '正在加载…';
+    setTimeout(function () {
+      renderMore();
+      bubbleEl.classList.remove('run');
+      busy = false;
+    }, 450);
   });
 
   fetch('history.json?v=' + ver(), { cache: 'no-store' })
