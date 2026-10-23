@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>更多历史 · 高报速递</title>
+<meta name="description" content="高报速递往期内容归档，按发布时间倒序，每次加载 6 条。">
+<style>
+  :root{--green:#1B5E20;--green-2:#2E7D32;--ink:#22312A;--muted:#6B7A72;--bg:#F6F8F5;--line:#E3EAE2}
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  body{margin:0;background:var(--bg);color:var(--ink);
+       font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;
+       font-size:16px;line-height:1.65}
+  .wrap{max-width:760px;margin:0 auto;padding:0 16px 40px}
+  .topbar{display:flex;justify-content:flex-end;padding:14px 0 0}
+  .topbar.bottom{padding:18px 0 0}
+  .back{color:var(--green);font-size:14px;text-decoration:none}
+  header{padding:6px 0 12px}
+  header h1{margin:0;font-size:26px;color:var(--green);letter-spacing:.5px}
+  header .meta{font-size:13px;color:var(--muted);margin-top:2px}
+  .tabs{display:flex;gap:8px;overflow-x:auto;padding:4px 0 14px;-webkit-overflow-scrolling:touch}
+  .tabs::-webkit-scrollbar{display:none}
+  .tab{flex:0 0 auto;padding:7px 14px;border:1px solid var(--line);border-radius:999px;
+       background:#fff;color:var(--muted);font-size:14px;cursor:pointer;white-space:nowrap}
+  .tab b{font-weight:600;opacity:.75;margin-left:4px;font-size:12px}
+  .tab.on{background:var(--green);border-color:var(--green);color:#fff}
+  .item{background:#fff;border:1px solid var(--line);border-radius:14px;padding:14px 16px;margin:0 0 10px}
+  .item .top{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted)}
+  .item .tag{background:#EEF5EC;color:var(--green-2);border-radius:6px;padding:1px 7px;font-size:12px}
+  .item h2{margin:6px 0 4px;font-size:17px;line-height:1.45;color:var(--ink)}
+  .item p{margin:0;font-size:14px;color:var(--muted);display:-webkit-box;-webkit-line-clamp:2;
+          -webkit-box-orient:vertical;overflow:hidden}
+  .item a{color:inherit;text-decoration:none;display:block}
+  .more{display:block;width:100%;margin:8px 0 4px;padding:11px;border:1px solid var(--green);
+        border-radius:12px;background:#fff;color:var(--green);font-size:15px;cursor:pointer}
+  .more[hidden]{display:none}
+  .state{text-align:center;color:var(--muted);font-size:13px;padding:14px 0 6px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="topbar"><a class="back" href="./index.html">← 返回今日高报速递</a></div>
+
+  <header>
+    <h1>更多历史</h1>
+    <div class="meta" id="meta">加载中…</div>
+  </header>
+
+  <div class="tabs" id="tabs"></div>
+
+  <div id="list"></div>
+  <button class="more" id="more" hidden>加载更多</button>
+  <div class="state" id="state"></div>
+
+  <div class="topbar bottom"><a class="back" href="./index.html">← 返回今日高报速递</a></div>
+</div>
+
+<script>
+(function () {
+  var PAGE = 6;                       // 每页 6 条（与首页栏目一屏 6 卡一致）
+  // 与首页栏目同名同序（备考备忘不入历史库，故不列）：即使 0 条也保留标签
+  var CATS = ['高报动态', '考试院动态', '专业介绍', '院校介绍', '城市介绍'];
+  var ALL = [], LIST = [], shown = 0, cat = 'all';
+  var listEl = document.getElementById('list');
+  var stateEl = document.getElementById('state');
+  var metaEl = document.getElementById('meta');
+  var tabsEl = document.getElementById('tabs');
+  var moreEl = document.getElementById('more');
+
+  // 文件名固定，靠 ?v=当天日期 绕过微信/CDN 强缓存
+  // 文件名固定，靠 ?v= 绕过微信/CDN 强缓存。只带日期不够——同一天多次重导出时
+  // 浏览器会一直吃早上那份旧 JSON（2026-10-23 实测：页面还停在此前条数）。
+  // 精确到分钟，既能把当天的多次生成区分开，又不至于每次都全量回源。
+  function ver() {
+    var d = new Date(), p = function (n) { return n < 10 ? '0' + n : '' + n }
+    return '' + d.getFullYear() + p(d.getMonth() + 1) + p(d.getDate())
+      + p(d.getHours()) + p(d.getMinutes())
+  }
+
+  function esc(s) {
+    return String(s || '').replace(/[&<>"]/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]
+    })
+  }
+
+  function buildTabs() {
+    var counts = {};
+    ALL.forEach(function (it) { counts[it.cat] = (counts[it.cat] || 0) + 1 });
+    var html = '<div class="tab on" data-cat="all">全部<b>' + ALL.length + '</b></div>';
+    CATS.forEach(function (c) {
+      html += '<div class="tab" data-cat="' + esc(c) + '">' + esc(c) + '<b>' + (counts[c] || 0) + '</b></div>';
+    });
+    tabsEl.innerHTML = html;
+  }
+
+  function pages() { return Math.max(1, Math.ceil(LIST.length / PAGE)) }
+
+  function renderMore() {
+    var end = Math.min(shown + PAGE, LIST.length);
+    var buf = '';
+    for (var i = shown; i < end; i++) {
+      var it = LIST[i];
+      buf += '<div class="item"><a href="' + esc(it.link || '#') + '" target="_blank" rel="noopener">'
+        + '<div class="top"><span>' + esc(it.date) + '</span>'
+        + (it.cat ? '<span class="tag">' + esc(it.cat) + '</span>' : '')
+        + '</div><h2>' + esc(it.title) + '</h2>'
+        + (it.summary ? '<p>' + esc(it.summary) + '</p>' : '')
+        + '</a></div>';
+    }
+    shown = end;
+    listEl.insertAdjacentHTML('beforeend', buf);
+
+    var left = LIST.length - shown;
+    moreEl.hidden = left <= 0;
+    moreEl.textContent = '加载下一页（还有 ' + left + ' 条）';
+    if (!LIST.length) {
+      stateEl.textContent = '暂无记录';
+    } else {
+      stateEl.textContent = '第 ' + Math.ceil(shown / PAGE) + ' / ' + pages() + ' 页'
+        + ' · 已显示 ' + shown + ' / ' + LIST.length + ' 条';
+    }
+  }
+
+  // 首页栏目头的「查看更多 >>>」会带 ?cat=专业介绍 过来，落地即定位到该栏目
+  function wantCat() {
+    var m = /[?&]cat=([^&#]*)/.exec(location.search);
+    if (!m) return '';
+    try { return decodeURIComponent(m[1]) } catch (e) { return '' }
+  }
+
+  function activate(c) {
+    var tabs = tabsEl.querySelectorAll('.tab'), hit = null;
+    [].forEach.call(tabs, function (x) {
+      x.classList.remove('on');
+      if (x.getAttribute('data-cat') === c) hit = x;
+    });
+    if (!hit) return false;
+    hit.classList.add('on');
+    return true;
+  }
+
+  function apply(c) {
+    cat = c;
+    LIST = c === 'all' ? ALL.slice() : ALL.filter(function (x) { return x.cat === c });
+    shown = 0;
+    listEl.innerHTML = '';
+    renderMore();
+  }
+
+  tabsEl.addEventListener('click', function (e) {
+    var t = e.target.closest('.tab');
+    if (!t) return;
+    [].forEach.call(this.querySelectorAll('.tab'), function (x) { x.classList.remove('on') });
+    t.classList.add('on');
+    var c = t.getAttribute('data-cat');
+    apply(c);
+    try {
+      var u = c === 'all' ? location.pathname : location.pathname + '?cat=' + encodeURIComponent(c);
+      history.replaceState(null, '', u);
+    } catch (e) { }
+  });
+
+  moreEl.addEventListener('click', function () {
+    if (shown < LIST.length) renderMore();
+  });
+
+  fetch('history.json?v=' + ver(), { cache: 'no-store' })
+    .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json() })
+    .then(function (d) {
+      ALL = d.items || [];
+      metaEl.textContent = '共 ' + ALL.length + ' 条 · 每页 ' + PAGE + ' 条 · 更新于 '
+        + (d.generated || '').replace('T', ' ');
+      buildTabs();
+      var want = wantCat();
+      if (want && want !== 'all' && activate(want)) { apply(want) } else { apply('all') }
+    })
+    .catch(function (e) {
+      stateEl.textContent = '历史数据加载失败：' + e.message + '（请稍后重试）';
+      metaEl.textContent = '加载失败';
+    });
+})()
+</script>
+</body>
+</html>
