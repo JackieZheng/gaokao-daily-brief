@@ -18,8 +18,14 @@
   header{padding:6px 0 12px}
   header h1{margin:0;font-size:26px;color:var(--green);letter-spacing:.5px}
   header .meta{font-size:13px;color:var(--muted);margin-top:2px}
-  .tabs{display:flex;gap:8px;overflow-x:auto;padding:4px 0 14px;-webkit-overflow-scrolling:touch}
-  .tabs::-webkit-scrollbar{display:none}
+  /* 筛选行：「全部」固定，其余栏目横向滚动（滚动条常显，窄屏可见更多栏目） */
+  .tabs-row{display:flex;align-items:flex-start;gap:8px;padding:4px 0 14px}
+  .tabs-scroll{flex:1;min-width:0;overflow-x:auto;-webkit-overflow-scrolling:touch;
+               scrollbar-width:thin;scrollbar-color:var(--line) transparent}
+  .tabs-scroll::-webkit-scrollbar{height:4px}
+  .tabs-scroll::-webkit-scrollbar-thumb{background:var(--line);border-radius:99px}
+  .tabs-scroll::-webkit-scrollbar-track{background:transparent}
+  .tabs{display:flex;gap:8px;width:max-content}
   .tab{flex:0 0 auto;padding:7px 14px;border:1px solid var(--line);border-radius:999px;
        background:#fff;color:var(--muted);font-size:14px;cursor:pointer;white-space:nowrap}
   .tab b{font-weight:600;opacity:.75;margin-left:4px;font-size:12px}
@@ -53,7 +59,10 @@
     <div class="meta" id="meta">加载中…</div>
   </header>
 
-  <div class="tabs" id="tabs"></div>
+  <div class="tabs-row">
+    <div class="tab on" data-cat="all" id="tab-all">全部<b id="cnt-all">0</b></div>
+    <div class="tabs-scroll"><div class="tabs" id="tabs"></div></div>
+  </div>
 
   <div id="list"></div>
   <div class="bubble" id="bubble"></div>
@@ -96,7 +105,8 @@
   function buildTabs() {
     var counts = {};
     ALL.forEach(function (it) { counts[it.cat] = (counts[it.cat] || 0) + 1 });
-    var html = '<div class="tab on" data-cat="all">全部<b>' + ALL.length + '</b></div>';
+    document.getElementById('cnt-all').textContent = ALL.length;
+    var html = '';
     CATS.forEach(function (c) {
       html += '<div class="tab" data-cat="' + esc(c) + '">' + esc(c) + '<b>' + (counts[c] || 0) + '</b></div>';
     });
@@ -137,14 +147,18 @@
     try { return decodeURIComponent(m[1]) } catch (e) { return '' }
   }
 
+  function allChip() { return document.getElementById('tab-all'); }
+
   function activate(c) {
     var tabs = tabsEl.querySelectorAll('.tab'), hit = null;
     [].forEach.call(tabs, function (x) {
       x.classList.remove('on');
       if (x.getAttribute('data-cat') === c) hit = x;
     });
-    if (!hit) return false;
-    hit.classList.add('on');
+    allChip().classList.toggle('on', c === 'all');
+    if (!hit) return c === 'all';
+    // 选中的栏目若被截断，横向滚到可见（只滚容器不滚页面）
+    try { hit.scrollIntoView({ behavior: 'smooth', inline: 'nearest', block: 'nearest' }); } catch (e) { }
     return true;
   }
 
@@ -156,10 +170,9 @@
     renderMore();
   }
 
-  tabsEl.addEventListener('click', function (e) {
-    var t = e.target.closest('.tab');
-    if (!t) return;
-    [].forEach.call(this.querySelectorAll('.tab'), function (x) { x.classList.remove('on') });
+  function pick(t) {
+    [].forEach.call(tabsEl.querySelectorAll('.tab'), function (x) { x.classList.remove('on') });
+    allChip().classList.remove('on');
     t.classList.add('on');
     var c = t.getAttribute('data-cat');
     apply(c);
@@ -167,6 +180,16 @@
       var u = c === 'all' ? location.pathname : location.pathname + '?cat=' + encodeURIComponent(c);
       history.replaceState(null, '', u);
     } catch (e) { }
+  }
+
+  tabsEl.addEventListener('click', function (e) {
+    var t = e.target.closest('.tab');
+    if (!t) return;
+    pick(t);
+  });
+  allChip().addEventListener('click', function () {
+    if (this.classList.contains('on')) return;
+    pick(this);
   });
 
   moreEl.addEventListener('click', function () {
